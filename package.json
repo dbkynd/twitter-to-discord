@@ -20,6 +20,7 @@
   "dependencies": {
     "debug": "^4.0.1",
     "discord.js": "^11.4.2",
+    "html-entities": "^1.2.1",
     "mongoose": "^5.2.15",
     "twitter": "^1.7.1",
     "twitter-stream-api": "^0.5.2"

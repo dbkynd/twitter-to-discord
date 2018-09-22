@@ -1,5 +1,9 @@
+'use strict';
+
 const debug = require('debug')('app:twitterAPI');
 const Twitter = require('twitter');
+
+debug('Loading twitterAPI.js');
 
 const twitter = new Twitter({
   consumer_key: process.env.TWITTER_CONSUMER_KEY,
@@ -24,5 +28,13 @@ module.exports = {
         resolve(body[0]);
       }
     });
+  }),
+
+  getTweet: id => new Promise((resolve, reject) => {
+    twitter.get('statuses/show', { id, tweet_mode: 'extended' },
+      (err, data) => {
+        if (err) return reject(err);
+        return resolve(data);
+      });
   }),
 };

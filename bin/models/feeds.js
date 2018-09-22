@@ -1,6 +1,8 @@
+'use strict';
+
 const mongoose = require('mongoose');
 
-const channels = new mongoose.Schema({
+const feeds = new mongoose.Schema({
   screen_name: String,
   twitter_id: String,
   channels: [{
@@ -9,4 +11,4 @@ const channels = new mongoose.Schema({
   }],
 });
 
-module.exports = mongoose.model('channels', channels);
+module.exports = mongoose.model('feeds', feeds);

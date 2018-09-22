@@ -1,3 +1,5 @@
+'use strict';
+
 const debug = require('debug')('app:app');
 
 console.log('Starting the twitter-to-discord application');
@@ -33,13 +35,6 @@ envTest(DISCORD_BOT_TOKEN, 'DISCORD_BOT_TOKEN');
 envTest(DISCORD_CMD_PREFIX, 'DISCORD_CMD_PREFIX');
 envTest(DISCORD_BOT_OWNER_ID, 'DISCORD_BOT_OWNER_ID');
 
-// Establish a connection to the mongodb
-require('./bin/mongodb');
-// Connect to Discord
-require('./bin/discordClient');
-
-// Twitter client
-const twitterClient = require('./bin/twitterClient');
-
-// Initial connection to Twitter Stream API on startup
-twitterClient.connect();
+// Passed all the startup tests
+// Continue to load application
+require('./bin');

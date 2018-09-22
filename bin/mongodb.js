@@ -1,5 +1,9 @@
+'use strict';
+
 const debug = require('debug')('app:mongodb');
 const mongoose = require('mongoose');
+
+debug('Loading mongodb.js');
 
 // Kill the process if the mongodb has a connection error within the first few seconds of launch
 // Likely this is a format error with the MONGO_URI
