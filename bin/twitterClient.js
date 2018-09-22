@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const debug = require('debug')('app:twitterClient');
 const TwitterStream = require('twitter-stream-api');
-const feedsModel = require('./models/feeds');
 const tweetHandler = require('./tweetHandler');
+const FeedsModel = require('./models/feeds');
 const store = require('./store');
 const myEvents = require('./events');
 
@@ -121,7 +121,7 @@ module.exports = {
     close();
     // Get all the registered twitter channel ids we need to connect to
     debug('getting channels from the mongodb');
-    feedsModel.find()
+    FeedsModel.find()
       .then(results => {
         debug(results);
         const ids = results.map(x => x.twitter_id);

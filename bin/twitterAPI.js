@@ -31,7 +31,7 @@ module.exports = {
   }),
 
   getTweet: id => new Promise((resolve, reject) => {
-    twitter.get('statuses/show', { id, tweet_mode: 'extended' },
+    twitter.get('statuses/show', { id },
       (err, data) => {
         if (err) return reject(err);
         return resolve(data);

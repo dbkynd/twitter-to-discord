@@ -3,7 +3,8 @@
 const debug = require('debug')('app:discordClient');
 const Discord = require('discord.js');
 const commandHandler = require('./discordCommandHandler');
-const feedsModel = require('./models/feeds');
+const FeedsModel = require('./models/feeds');
+const TweetsModel = require('./models/tweets');
 
 debug('Loading discordClient.js');
 
@@ -81,18 +82,31 @@ module.exports = {
         process.exit(1);
       });
   },
-  send: (id, str, files) => {
+
+  send: (tweet, str, files) => {
     // Get the record for the current feed
-    feedsModel.findOne({ twitter_id: id })
+    FeedsModel.findOne({ twitter_id: tweet.user.id_str })
       .then(data => {
+        // Get channels that exist and we have send message permissions in
+        // Mapped into an array of promises
         const channels = data.channels
           .map(c => client.channels.get(c.channel_id))
           .filter(c => c && c.permissionsFor(client.user).has('SEND_MESSAGES'))
           .map(c => channelSend(c, str, files));
+        // Send to Discord channels
         promiseSome(channels)
           .then(promiseResults => {
             debug(promiseResults);
-
+            const entry = new TweetsModel({
+              tweet_id: tweet.id_str,
+              messages: promiseResults,
+            });
+            debug('saving discord message ids to database');
+            entry.save()
+              .then(() => {
+                debug('save to database completed ok');
+              })
+              .catch(console.error);
           })
           .catch(console.error);
       })
@@ -108,13 +122,15 @@ function promiseSome(array) {
     const results = Array(array.length);
     let num = 0;
     for (let i = 0; i < array.length; i++) {
-      Promise.resolve(array[i]).then(resolvedResults => {
-        results[i] = resolvedResults;
-        checkIfDone();
-      }).catch(() => {
-        results[i] = null;
-        checkIfDone();
-      });
+      Promise.resolve(array[i])
+        .then(resolvedResults => {
+          results[i] = resolvedResults;
+          checkIfDone();
+        })
+        .catch(() => {
+          results[i] = null;
+          checkIfDone();
+        });
     }
 
     function checkIfDone() {
@@ -127,7 +143,7 @@ function promiseSome(array) {
 function channelSend(channel, str, files) {
   return new Promise((resolve, reject) => {
     channel.send(str, { files })
-      .then(message => resolve({ channelId: channel.id, messageId: message.id }))
+      .then(message => resolve({ channel_id: channel.id, message_id: message.id }))
       .catch(reject);
   });
 }

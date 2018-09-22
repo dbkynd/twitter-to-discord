@@ -11,4 +11,4 @@ const feeds = new mongoose.Schema({
   }],
 });
 
-module.exports = mongoose.model('feeds', feeds);
+module.exports = mongoose.model('twitter_feeds', feeds);

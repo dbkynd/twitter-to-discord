@@ -22,6 +22,7 @@
     "discord.js": "^11.4.2",
     "html-entities": "^1.2.1",
     "mongoose": "^5.2.15",
+    "node-fetch": "^2.2.0",
     "twitter": "^1.7.1",
     "twitter-stream-api": "^0.5.2"
   },

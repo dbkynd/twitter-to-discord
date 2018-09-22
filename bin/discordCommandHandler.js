@@ -2,7 +2,7 @@
 
 const debug = require('debug')('app:commandHandler');
 const Discord = require('discord.js');
-const feedsModel = require('./models/feeds');
+const FeedsModel = require('./models/feeds');
 const twitterAPI = require('./twitterAPI');
 const store = require('./store');
 const myEvents = require('./events');
@@ -88,7 +88,7 @@ module.exports = msg => {
 function getSingleRecord(screenName) {
   return new Promise((resolve, reject) => {
     const name = new RegExp(`^${screenName}$`, 'i');
-    feedsModel.findOne({ screen_name: name })
+    FeedsModel.findOne({ screen_name: name })
       .then(resolve)
       .catch(reject);
   });
@@ -96,7 +96,7 @@ function getSingleRecord(screenName) {
 
 function getAllRecords() {
   return new Promise((resolve, reject) => {
-    feedsModel.find()
+    FeedsModel.find()
       .then(resolve)
       .catch(reject);
   });
@@ -142,7 +142,7 @@ function addChannel(msg, target, data) {
           return;
         }
         // Create the record to save
-        const entry = feedsModel({
+        const entry = FeedsModel({
           screen_name: userData.screen_name,
           twitter_id: userData.id_str,
           channels: [{
