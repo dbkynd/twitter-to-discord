@@ -4,7 +4,7 @@ const debug = require('debug')('app:tweetHandler');
 const fs = require('fs');
 const Entities = require('html-entities').AllHtmlEntities;
 const fetch = require('node-fetch');
-const store = require('./store');
+const utils = require('./utils');
 const discordClient = require('./discordClient');
 const TweetsModel = require('./models/tweets');
 
@@ -28,7 +28,7 @@ module.exports = (tweet, manual) => {
 
   // Exit if tweet is not authored by a registered user we are currently streaming
   // This covers most re-tweets and replies unless from  another registered user
-  if (!store.ids.includes(tweet.user.id_str)) {
+  if (!utils.ids.includes(tweet.user.id_str)) {
     debug(`TWEET: ${tweet.id_str}: Authored by an unregistered user. Exiting.`);
     return;
   }
@@ -72,12 +72,83 @@ module.exports = (tweet, manual) => {
     extendedEntities = context.extended_entities;
   }
   // Decode html entities in the twitter text string so they appear correctly (&amp)
-  text = htmlEntities.decode(text);
-  debug(text);
+  let modifiedText = htmlEntities.decode(text);
+  debug(modifiedText);
   debug(extendedEntities);
 
-  discordClient.send(tweet, `https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
+  // Array to hold picture and gif urls we will extract from extended_entities
+  const mediaUrls = [];
+  // Array of urls we have escaped to avoid escaping more than once
+  const escapedUrls = [];
+
+  if (extendedEntities) {
+    // Extract photos
+    extendedEntities.media.filter(media => media.type === 'photo')
+      .forEach(media => {
+        // Add image to media list
+        mediaUrls.push({ image: media.media_url_https });
+        // Escape the media url so it does not auto-embed in discord
+        // Wrapped in <>
+        // Only escape once
+        if (!escapedUrls.includes(media.url)) {
+          escapedUrls.push(media.url);
+          modifiedText = modifiedText.replace(media.url, `<${media.url}>`);
+        }
+      });
+
+    // Extract gifs
+    extendedEntities.media.filter(media => media.type === 'animated_gif')
+      .forEach(media => {
+        // Get the mp4 data object
+        const video = media.video_info.variants[0].url;
+        // Use the media image as backup if conversion fails
+        const image = media.media_url_https;
+        // Add media data to list
+        mediaUrls.push({ video, image });
+        // Escape the media url so it does not auto-embed in discord
+        // Wrapped in <>
+        // Only escape once
+        if (!escapedUrls.includes(media.url)) {
+          escapedUrls.push(media.url);
+          modifiedText = modifiedText.replace(media.url, `<${media.url}>`);
+        }
+      });
+  }
+  debug('mediaUrls', mediaUrls);
+
+  // Trim any whitespace left from replacing strings in the modifiedText string
+  modifiedText = modifiedText.trim();
+
+  // Create a new string to send to Discord
+  let str = `\`\`\`qml\nNew Tweet from ${tweet.user.screen_name}:\`\`\``
+    + `<https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}>\n`;
+  if (modifiedText) {
+    let nameRT;
+    if (tweet.retweeted_status) nameRT = tweet.retweeted_status.user.screen_name;
+    str += `\n${nameRT ? `RT @${nameRT}: ` : ''}${modifiedText}\n`;
+  }
+  debug(str);
+
+  // Process the media entries
+  utils.promiseSome(mediaUrls.map(media => processMediaEntry(media, tweet.id_str)))
+    .then(() => {
+      // Send to the Discord Client
+      discordClient.send(tweet, str);
+    })
+    .catch(err => {
+      console.error(err);
+      // Send the string to the Discord Client regardless that the media promise failed
+      // This should not occur if a single media element fails but due to a greater internal concern
+      // as promiseSome does not reject on a single promise rejection unlike Promise.All
+      discordClient.send(tweet, str);
+    });
 };
+
+function processMediaEntry(media, id) {
+  return new Promise((resolve, reject) => {
+    resolve();
+  });
+}
 
 function deleteTweet(tweet) {
   if (!tweet || !tweet.delete || !tweet.delete.status) return;

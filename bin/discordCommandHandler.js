@@ -4,7 +4,7 @@ const debug = require('debug')('app:commandHandler');
 const Discord = require('discord.js');
 const FeedsModel = require('./models/feeds');
 const twitterAPI = require('./twitterAPI');
-const store = require('./store');
+const utils = require('./utils');
 const myEvents = require('./events');
 
 debug('Loading discordCommandHandler.js');
@@ -157,7 +157,7 @@ function addChannel(msg, target, data) {
             msg.channel.send(`This channel will now receive tweets from **${entry.screen_name}**`)
               .catch(console.error);
             debug('New user added, flagging twitter reload');
-            store.reload = true;
+            utils.reload = true;
           })
           .catch(err => {
             console.error(err);
@@ -205,7 +205,7 @@ function removeChannel(msg, target, data) {
           .catch(console.error);
         if (data.channels.length === 0) {
           debug('Old user removed, flagging reload');
-          store.reload = true;
+          utils.reload = true;
         }
       })
         .catch(err => {
