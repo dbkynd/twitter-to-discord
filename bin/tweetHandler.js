@@ -51,8 +51,10 @@ module.exports = (tweet, manual) => {
 
   // Store the tweet for reference / tests
   // These are flushed after a months time daily
-  fs.writeFileSync(`./tweets/${tweet.user.screen_name}-${tweet.id_str}${manual ? '-man' : ''}.json`,
-    JSON.stringify(tweet, null, 2), { encoding: 'utf8' });
+  if (process.env.NODE_ENV === 'development') {
+    fs.writeFileSync(`./tweets/${tweet.user.screen_name}-${tweet.id_str}${manual ? '-man' : ''}.json`,
+      JSON.stringify(tweet, null, 2), { encoding: 'utf8' });
+  }
 
   // Exit if tweet is a reply not from the same user. ie in a thread
   if (tweet.in_reply_to_user_id_str && tweet.in_reply_to_user_id_str !== tweet.user.id_str) {

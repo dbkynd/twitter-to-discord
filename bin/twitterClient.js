@@ -1,7 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const debug = require('debug')('app:twitterClient');
 const TwitterStream = require('twitter-stream-api');
 const tweetHandler = require('./tweetHandler');
@@ -120,12 +118,6 @@ setInterval(() => {
   module.exports.connect();
 }, 1000 * 60 * 5);
 
-// Remove any stored tweet.json that are older than 1 month
-// Checked every 24 hours
-setInterval(removeOldFiles, 1000 * 60 * 60 * 24);
-// Run shortly after startup
-setTimeout(removeOldFiles, 5000);
-
 function connect() {
   debug('starting twitter connect');
   utils.reload = false;
@@ -160,31 +152,6 @@ function close() {
     debug('closing the open twitter connection');
     twitter.close();
   }
-}
-
-function removeOldFiles() {
-  debug('checking for any old tweet.json files to remove');
-  const folder = './tweets';
-  fs.readdir(folder, (readdirErr, files) => {
-    if (readdirErr) {
-      console.error(readdirErr);
-      return;
-    }
-    files.forEach(file => {
-      fs.stat(path.join(folder, file), (statErr, stat) => {
-        if (statErr) {
-          console.error(statErr);
-          return;
-        }
-        const now = new Date().getTime();
-        const endTime = new Date(stat.ctime).getTime() + 2419200000;
-        if (now > endTime) {
-          debug(`removing: ${path.join(folder, file)}`);
-          fs.unlink(path.join(folder, file), console.error);
-        }
-      });
-    });
-  });
 }
 
 module.exports = {
