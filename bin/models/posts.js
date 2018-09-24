@@ -2,7 +2,7 @@
 
 const mongoose = require('mongoose');
 
-const tweets = new mongoose.Schema({
+const posts = new mongoose.Schema({
   tweet_id: String,
   messages: [{
     channel_id: String,
@@ -10,4 +10,4 @@ const tweets = new mongoose.Schema({
   }],
 });
 
-module.exports = mongoose.model('twitter_tweets', tweets);
+module.exports = mongoose.model('twitter_posts', posts);
