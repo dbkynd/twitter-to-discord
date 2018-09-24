@@ -2,6 +2,8 @@
 
 const debug = require('debug')('app:discordClient');
 const Discord = require('discord.js');
+const rimraf = require('rimraf');
+const path = require('path');
 const commandHandler = require('./discordCommandHandler');
 const FeedsModel = require('./models/feeds');
 const TweetsModel = require('./models/tweets');
@@ -108,6 +110,11 @@ module.exports = {
                 debug('save to database completed ok');
               })
               .catch(console.error);
+            // Remove the temp directory we made for converting gifs if it exists
+            debug('removing temp tweet directory');
+            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), err =>  {
+              debug('removal of temp tweet directory completed: Error:', err);
+            });
           })
           .catch(console.error);
       })

@@ -2,8 +2,10 @@
 
 const debug = require('debug')('app:tweetHandler');
 const fs = require('fs');
+const path = require('path');
 const Entities = require('html-entities').AllHtmlEntities;
 const fetch = require('node-fetch');
+const { exec } = require('child_process');
 const utils = require('./utils');
 const discordClient = require('./discordClient');
 const TweetsModel = require('./models/tweets');
@@ -73,8 +75,6 @@ module.exports = (tweet, manual) => {
   }
   // Decode html entities in the twitter text string so they appear correctly (&amp)
   let modifiedText = htmlEntities.decode(text);
-  debug(modifiedText);
-  debug(extendedEntities);
 
   // Array to hold picture and gif urls we will extract from extended_entities
   const mediaUrls = [];
@@ -127,16 +127,28 @@ module.exports = (tweet, manual) => {
     if (tweet.retweeted_status) nameRT = tweet.retweeted_status.user.screen_name;
     str += `\n${nameRT ? `RT @${nameRT}: ` : ''}${modifiedText}\n`;
   }
-  debug(str);
 
   // Process the media entries
-  utils.promiseSome(mediaUrls.map(media => processMediaEntry(media, tweet.id_str)))
-    .then(() => {
-      // Send to the Discord Client
-      discordClient.send(tweet, str);
+  utils.promiseSome(mediaUrls.map(urls => processMediaEntry(urls, tweet.id_str)))
+    .then(media => {
+      // There are no files to attach
+      if (media.length === 0) {
+        // Send to the Discord Client
+        discordClient.send(tweet, str);
+        return;
+      }
+      // Attach files to discord message
+      let num = media.length;
+      // Map the object as discord.js expects it
+      // Decremental filename to do our best to sort the same as twitter did
+      const files = media.map(file => {
+        const p = path.parse(file);
+        return { attachment: file, name: `${num--}${p.ext}` };
+      });
+      discordClient.send(tweet, str, files);
     })
     .catch(err => {
-      console.error(err);
+      console.error('processMediaEntry promiseSome ERROR', err);
       // Send the string to the Discord Client regardless that the media promise failed
       // This should not occur if a single media element fails but due to a greater internal concern
       // as promiseSome does not reject on a single promise rejection unlike Promise.All
@@ -146,7 +158,85 @@ module.exports = (tweet, manual) => {
 
 function processMediaEntry(media, id) {
   return new Promise((resolve, reject) => {
-    resolve();
+    // If there is only an image we don't have to do anything
+    if (!media.video && media.image) {
+      resolve(media.image);
+      return;
+    }
+    // Create a data object to pass through all the promises
+    // It will mutate along the way
+    const data = {
+      tempDirectory: path.join(process.env.TEMP, `tweet-${id}`),
+      framesDirectory: path.join(process.env.TEMP, `tweet-${id}`, 'frames'),
+      url: media.video,
+    };
+    debug(data);
+    // Promise chain to transform mp4 into gif
+    utils.createDir(data.tempDirectory)
+      .then(() => saveVideo(data))
+      .then(videoLocation => {
+        data.videoLocation = videoLocation;
+        return utils.createDir(data.framesDirectory);
+      })
+      .then(() => createFrames(data))
+      .then(framesPath => {
+        data.framesPath = framesPath;
+        return createGIF(data);
+      })
+      .then(gifLocation => resolve(gifLocation))
+      .catch(reject);
+  });
+}
+
+// Save MP4 to temp tweet folder
+function saveVideo(data) {
+  return new Promise((resolve, reject) => {
+    const location = path.join(data.tempDirectory, 'video.mp4');
+    fetch(data.url)
+      .then(res => {
+        const dest = fs.createWriteStream(location);
+        res.body.pipe(dest);
+        res.body.on('error', err => {
+          reject(err);
+        });
+        dest.on('finish', () => {
+          resolve(location);
+        });
+        dest.on('error', err => {
+          reject(err);
+        });
+      });
+  });
+}
+
+// Use ffmpeg to get images of the movie at intervals and save them to the frames dir
+function createFrames(data) {
+  return new Promise((resolve, reject) => {
+    const location = path.join(data.framesDirectory, '/ffout%03d.png');
+    exec(`ffmpeg -i "${data.videoLocation}" -vf scale=250:-1:flags=lanczos,fps=10 "${location}"`,
+      (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(location);
+        }
+      });
+  });
+}
+
+// Use GraphicsMagik to convert frames into a gif
+function createGIF(data) {
+  return new Promise((resolve, reject) => {
+    const frames = data.framesPath.replace('ffout%03d.png', 'ffout*.png');
+    const location = path.join(data.tempDirectory, 'video.gif');
+    exec(`gm convert -loop 0 "${frames}" "${location}"`,
+      (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(location);
+        }
+      });
   });
 }
 
@@ -154,27 +244,29 @@ function deleteTweet(tweet) {
   if (!tweet || !tweet.delete || !tweet.delete.status) return;
   debug(`TWEET: ${tweet.delete.status.id_str}: Processing deletion...`);
   // Find a matching record for the tweet id
-  TweetsModel.findOne({ tweet_id: tweet.delete.status.id_str })
-    .then(result => {
-      debug(result);
-      // Exit if no match or the messages property does not exist for some reason
-      if (!result || !result.messages) return;
-      result.messages
-        .forEach(msg => {
-          // Send a DELETE request to Discord api directly for each message we want to delete
-          const uri = `https://discordapp.com/api/channels/${msg.channel_id}/messages/${msg.message_id}`;
-          debug(uri);
-          fetch(uri, {
-            method: 'DELETE',
-            headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-            },
-          })
-            .then(() => {
-              debug('Twitter message deleted OK');
+  TweetsModel.find({ tweet_id: tweet.delete.status.id_str })
+    .then(results => {
+      results.forEach(result => {
+        debug(result);
+        // Exit if no match or the messages property does not exist for some reason
+        if (!result || !result.messages) return;
+        result.messages
+          .forEach(msg => {
+            // Send a DELETE request to Discord api directly for each message we want to delete
+            const uri = `https://discordapp.com/api/channels/${msg.channel_id}/messages/${msg.message_id}`;
+            debug(uri);
+            fetch(uri, {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              },
             })
-            .catch(console.error);
-        });
+              .then(() => {
+                debug('Twitter message deleted OK');
+              })
+              .catch(console.error);
+          });
+      });
     })
     .catch(console.error);
 }
