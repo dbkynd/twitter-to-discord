@@ -1,13 +1,13 @@
 'use strict';
 
-const debug = require('debug')('app:twitterClient');
 const TwitterStream = require('twitter-stream-api');
+const logger = require('./logger');
 const tweetHandler = require('./tweetHandler');
 const FeedsModel = require('./models/feeds');
 const utils = require('./utils');
 const myEvents = require('./events');
 
-debug('Loading twitterClient.js');
+logger.debug('Loading twitterClient.js');
 
 const twitter = new TwitterStream({
   consumer_key: process.env.TWITTER_CONSUMER_KEY,
@@ -18,13 +18,14 @@ const twitter = new TwitterStream({
 
 // Emitted when a successful connection to the Twitter Stream API is established.
 twitter.on('connection success', url => {
-  console.log('twitter: connection success');
-  debug(url);
+  logger.info('twitter: connection success');
+  logger.info(`twitter: streaming ${utils.ids.length} twitter feed(s)`);
+  logger.debug(url);
 });
 
 // Emitted when a the connection to the Twitter Stream API is taken down / closed.
 twitter.on('connection aborted', () => {
-  console.warn('twitter: connection aborted');
+  logger.warn('twitter: connection aborted');
   // Clear the currently streamed ids array
   utils.ids = [];
 });
@@ -35,7 +36,8 @@ twitter.on('connection aborted', () => {
 // The reconnect will attempt a reconnect after 250 milliseconds
 // and increase the reconnect attempts linearly up to 16 seconds.
 twitter.on('connection error network', error => {
-  console.warn('twitter: connection error network', error);
+  logger.warn('twitter: connection error network');
+  logger.warn(error);
 });
 
 // Emitted when the connection to the Twitter Stream API have been flagged as stall.
@@ -47,7 +49,7 @@ twitter.on('connection error network', error => {
 // The reconnect will attempt a reconnect after 250 milliseconds
 // and increase the reconnect attempts linearly up to 16 seconds.
 twitter.on('connection error stall', () => {
-  console.warn('twitter: connection error stall');
+  logger.warn('twitter: connection error stall');
 });
 
 // Emitted when the connection to the Twitter Stream API return an HTTP error code.
@@ -57,7 +59,7 @@ twitter.on('connection error stall', () => {
 // and increase the reconnect attempts exponentially up to 320 seconds.
 twitter.on('connection error http', httpStatusCode => {
   if (httpStatusCode === 401) {
-    console.error('twitter: 401 Unauthorized. Please check your Twitter application credentials.');
+    logger.error('twitter: 401 Unauthorized. Please check your Twitter application credentials.');
     process.exit(1);
   }
 });
@@ -69,7 +71,7 @@ twitter.on('connection error http', httpStatusCode => {
 // The reconnect will attempt a reconnect after 1 minute
 // and double the reconnect attempts exponentially.
 twitter.on('connection rate limit', httpStatusCode => {
-  console.warn('twitter: connection rate limit', httpStatusCode);
+  logger.warn(`twitter: connection rate limit ${httpStatusCode}`);
 });
 
 // Emitted when the connection to the Twitter Stream API throw an unexpected error
@@ -79,7 +81,8 @@ twitter.on('connection rate limit', httpStatusCode => {
 // Closing the connection and handling a possible reconnect
 // must be handled by the consumer of the client.
 twitter.on('connection error unknown', error => {
-  console.warn('twitter: connection error unknown', error);
+  logger.error('twitter: connection error unknown', error);
+  logger.error(error);
   // Connect to twitter again
   // This will terminate the previous connection if it still exists
   connect();
@@ -91,13 +94,14 @@ twitter.on('connection error unknown', error => {
 // These keep alive messages are mostly being used under the hood
 // to detect stalled connections and other connection issues.
 twitter.on('data keep-alive', () => {
-  debug('twitter: data keep-alive');
+  logger.verbose('twitter: data keep-alive');
 });
 
 // Emitted if the client received an message from the Twitter Stream API
 // which the client could not parse into an object or handle in some other way.
 twitter.on('data error', error => {
-  console.error('twitter: data error', error);
+  logger.error('twitter: data error');
+  logger.error(error);
 });
 
 // Emitted when a Tweet occurs in the stream.
@@ -113,29 +117,28 @@ myEvents.on('post', data => {
 // Checked every 5 minutes
 setInterval(() => {
   if (!utils.reload) return;
-  debug('triggering twitter client reconnect due to reload flag');
-  console.log('Scheduled restart of Twitter Client');
+  logger.debug('triggering twitter client reconnect due to reload flag');
+  logger.info('Scheduled restart of Twitter Client');
   module.exports.connect();
 }, 1000 * 60 * 5);
 
 function connect() {
-  debug('starting twitter connect');
+  logger.debug('starting twitter connect');
   utils.reload = false;
   // Close the connection if already existing
   close();
   // Get all the registered twitter channel ids we need to connect to
-  debug('getting channels from the mongodb');
+  logger.debug('getting channels from the mongodb');
   FeedsModel.find()
     .then(results => {
-      debug(results);
+      logger.debug(results.length);
       const ids = results.map(x => x.twitter_id);
-      console.log(`Streaming ${ids.length} twitter feed(s)`);
       utils.ids = ids;
       if (ids.length === 0) {
-        debug('there are no twitterChannels registered in the mongodb. no need to connect to twitter');
+        logger.debug('there are no twitterChannels registered in the mongodb. no need to connect to twitter');
         return;
       }
-      console.log('Attempting to connect to the Twitter stream API...');
+      logger.info('twitter: connecting...');
       // Stream tweets
       twitter.stream('statuses/filter', {
         follow: ids,
@@ -143,13 +146,14 @@ function connect() {
       });
     })
     .catch(err => {
-      console.error('error reading from mongodb', err);
+      logger.error('error reading from mongodb');
+      logger.error(err);
     });
 }
 
 function close() {
   if (twitter.connection && twitter.connection.request) {
-    debug('closing the open twitter connection');
+    logger.debug('closing the open twitter connection');
     twitter.close();
   }
 }

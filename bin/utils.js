@@ -1,7 +1,7 @@
 'use strict';
 
-const debug = require('debug')('app:utils');
 const fs = require('fs');
+const logger = require('./logger');
 
 const ids = [];
 let reload = false; // eslint-disable-line prefer-const
@@ -58,13 +58,13 @@ function createDir(location) {
 
 function exists(location) {
   return new Promise((resolve, reject) => {
-    debug('checking existence of', location);
+    logger.debug(`checking existence of ${location}`);
     fs.access(location, fs.constants.F_OK, err => {
       if (err) {
-        debug(location, 'does not exist');
+        logger.debug(`${location} does not exist`);
         reject(err);
       } else {
-        debug(location, 'exists');
+        logger.debug(`${location} exists`);
         resolve(location);
       }
     });
@@ -73,13 +73,13 @@ function exists(location) {
 
 function makeDir(location) {
   return new Promise((resolve, reject) => {
-    debug('make directory:', location);
+    logger.debug(`make directory: ${location}`);
     fs.mkdir(location, err => {
       if (err) {
-        debug('make directory fail:', location);
+        logger.debug(`make directory fail: ${location}`);
         reject(err);
       } else {
-        debug('make directory ok:', location);
+        logger.debug(`make directory ok: ${location}`);
         resolve();
       }
     });

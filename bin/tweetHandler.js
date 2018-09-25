@@ -1,16 +1,16 @@
 'use strict';
 
-const debug = require('debug')('app:tweetHandler');
 const fs = require('fs');
 const path = require('path');
 const Entities = require('html-entities').AllHtmlEntities;
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
+const logger = require('./logger');
 const utils = require('./utils');
 const discordClient = require('./discordClient');
-const TweetsModel = require('./models/tweets');
+const PostsModel = require('./models/posts');
 
-debug('Loading tweetHandler.js');
+logger.debug('Loading tweetHandler.js');
 
 const htmlEntities = new Entities();
 const recentTweets = [];
@@ -20,18 +20,17 @@ module.exports = (tweet, manual) => {
   // Handle tweet deletions first
   // The JSON structure is completely different on a deletion
   if (tweet.delete) {
-    debug(tweet);
-    debug(`TWEET: ${tweet.delete.status.id_str}: DELETED`);
+    logger.info(`TWEET: ${tweet.delete.status.id_str}: DELETED`);
     deleteTweet(tweet);
     return;
   }
 
-  debug(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
+  logger.debug(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
 
   // Exit if tweet is not authored by a registered user we are currently streaming
   // This covers most re-tweets and replies unless from  another registered user
   if (!utils.ids.includes(tweet.user.id_str)) {
-    debug(`TWEET: ${tweet.id_str}: Authored by an unregistered user. Exiting.`);
+    logger.debug(`TWEET: ${tweet.id_str}: Authored by an unregistered user. Exiting.`);
     return;
   }
 
@@ -40,7 +39,7 @@ module.exports = (tweet, manual) => {
   // Manual posts bypass this check
   if (!manual) {
     if (recentTweets.includes(tweet.id_str)) {
-      debug(`TWEET: ${tweet.id_str}: Was recently processed. Duplicate? Exiting.`);
+      logger.debug(`TWEET: ${tweet.id_str}: Was recently processed. Duplicate? Exiting.`);
       return;
     }
     recentTweets.push(tweet.id_str);
@@ -52,29 +51,38 @@ module.exports = (tweet, manual) => {
   // Store the tweet for reference / tests
   // These are flushed after a months time daily
   if (process.env.NODE_ENV === 'development') {
-    fs.writeFileSync(`./tweets/${tweet.user.screen_name}-${tweet.id_str}${manual ? '-man' : ''}.json`,
-      JSON.stringify(tweet, null, 2), { encoding: 'utf8' });
+    const filepath = `./tweets/${tweet.user.screen_name}-${tweet.id_str}${manual ? '-man' : ''}.json`;
+    logger.debug(`storing tweet JSON to: ${filepath}`);
+    fs.writeFileSync(filepath, JSON.stringify(tweet, null, 2), { encoding: 'utf8' });
   }
 
   // Exit if tweet is a reply not from the same user. ie in a thread
   if (tweet.in_reply_to_user_id_str && tweet.in_reply_to_user_id_str !== tweet.user.id_str) {
-    debug(`TWEET: ${tweet.id_str}: Non-self reply. Exiting.`);
+    logger.debug(`TWEET: ${tweet.id_str}: Non-self reply. Exiting.`);
     return;
   }
+
+  logger.info(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
 
   // Get the proper tweet context
   // The tweet or the re-tweeted tweet if it exists
   const context = tweet.retweeted_status || tweet;
   let text;
   let extendedEntities;
-  // Use the extended tweet data if the tweet was truncated. ie over 140 chars
-  if (tweet.truncated) {
+  // The json object we get back from a manual tweet is slightly different from a streamed tweet
+  if (manual) {
+    text = context.full_text;
+    extendedEntities = context.extended_entities;
+  } else if (tweet.truncated) {
+    // Use the extended tweet data if the tweet was truncated. ie over 140 chars
     text = context.extended_tweet.full_text;
     extendedEntities = context.extended_tweet.extended_entities;
   } else {
+    // Use the standard tweet data
     text = context.text; // eslint-disable-line prefer-destructuring
     extendedEntities = context.extended_entities;
   }
+
   // Decode html entities in the twitter text string so they appear correctly (&amp)
   let modifiedText = htmlEntities.decode(text);
 
@@ -116,7 +124,6 @@ module.exports = (tweet, manual) => {
         }
       });
   }
-  debug('mediaUrls', mediaUrls);
 
   // Trim any whitespace left from replacing strings in the modifiedText string
   modifiedText = modifiedText.trim();
@@ -150,7 +157,7 @@ module.exports = (tweet, manual) => {
       discordClient.send(tweet, str, files);
     })
     .catch(err => {
-      console.error('processMediaEntry promiseSome ERROR', err);
+      logger.error(err);
       // Send the string to the Discord Client regardless that the media promise failed
       // This should not occur if a single media element fails but due to a greater internal concern
       // as promiseSome does not reject on a single promise rejection unlike Promise.All
@@ -172,7 +179,6 @@ function processMediaEntry(media, id) {
       framesDirectory: path.join(process.env.TEMP, `tweet-${id}`, 'frames'),
       url: media.video,
     };
-    debug(data);
     // Promise chain to transform mp4 into gif
     utils.createDir(data.tempDirectory)
       .then(() => saveVideo(data))
@@ -244,19 +250,18 @@ function createGIF(data) {
 
 function deleteTweet(tweet) {
   if (!tweet || !tweet.delete || !tweet.delete.status) return;
-  debug(`TWEET: ${tweet.delete.status.id_str}: Processing deletion...`);
+  logger.debug(`TWEET: ${tweet.delete.status.id_str}: Processing deletion...`);
   // Find a matching record for the tweet id
-  TweetsModel.find({ tweet_id: tweet.delete.status.id_str })
+  PostsModel.find({ tweet_id: tweet.delete.status.id_str })
     .then(results => {
       results.forEach(result => {
-        debug(result);
         // Exit if no match or the messages property does not exist for some reason
         if (!result || !result.messages) return;
         result.messages
           .forEach(msg => {
             // Send a DELETE request to Discord api directly for each message we want to delete
             const uri = `https://discordapp.com/api/channels/${msg.channel_id}/messages/${msg.message_id}`;
-            debug(uri);
+            logger.debug(uri);
             fetch(uri, {
               method: 'DELETE',
               headers: {
@@ -264,11 +269,11 @@ function deleteTweet(tweet) {
               },
             })
               .then(() => {
-                debug('Twitter message deleted OK');
+                logger.debug('discord twitter post message delete OK');
               })
-              .catch(console.error);
+              .catch(logger.error);
           });
       });
     })
-    .catch(console.error);
+    .catch(logger.error);
 }

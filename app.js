@@ -1,10 +1,10 @@
 'use strict';
 
-const debug = require('debug')('app:app');
 const fs = require('fs');
 const commandExistsSync = require('command-exists').sync;
+const logger = require('./bin/logger');
 
-console.log('Starting the twitter-to-discord application');
+logger.info('Starting the twitter-to-discord application');
 
 // Extract all the env variables we will be using
 const {
@@ -21,14 +21,13 @@ const {
 
 // Exit if the env variable was not set or passed. None can be empty
 function envTest(value, name) {
-  debug(name, value);
+  logger.debug(`${name}=${value}`);
   if (!value) {
-    console.error(`Missing the environment variable '${name}'`);
+    logger.error(`Missing the environment variable '${name}'`);
     process.exit(1);
   }
 }
 
-debug('checking that all the env variables are set');
 envTest(TWITTER_CONSUMER_KEY, 'TWITTER_CONSUMER_KEY');
 envTest(TWITTER_CONSUMER_SECRET, 'TWITTER_CONSUMER_SECRET');
 envTest(TWITTER_ACCESS_TOKEN_KEY, 'TWITTER_ACCESS_TOKEN_KEY');
@@ -43,18 +42,18 @@ envTest(TEMP, 'TEMP');
 try {
   fs.accessSync(process.env.TEMP, fs.constants.F_OK);
 } catch (err) {
-  console.error('Unable to access the temp directory:', process.env.TEMP);
-  console.error(err);
+  logger.error(`Unable to access the temp directory: ${process.env.TEMP}`);
+  logger.debug(err);
   process.exit(1);
 }
 
 // Ensure all the commands we need to function exist via PATH
 if (!commandExistsSync('ffmpeg')) {
-  console.error('ffmpeg is not available on the command line');
+  logger.error('\'ffmpeg\' is not available on the command line');
   process.exit(1);
 }
 if (!commandExistsSync('gm')) {
-  console.error('gm is not available on the command line');
+  logger.error('\'gm\' is not available on the command line');
   process.exit(1);
 }
 

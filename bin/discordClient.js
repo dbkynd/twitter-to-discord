@@ -1,15 +1,15 @@
 'use strict';
 
-const debug = require('debug')('app:discordClient');
 const Discord = require('discord.js');
 const rimraf = require('rimraf');
 const path = require('path');
+const logger = require('./logger');
 const commandHandler = require('./discordCommandHandler');
 const FeedsModel = require('./models/feeds');
-const TweetsModel = require('./models/tweets');
+const PostsModel = require('./models/posts');
 const utils = require('./utils');
 
-debug('Loading discordClient.js');
+logger.debug('Loading discordClient.js');
 
 const client = new Discord.Client({
   disableEveryone: true,
@@ -20,32 +20,35 @@ const client = new Discord.Client({
 
 // Discord has disconnected
 client.on('disconnect', () => {
-  console.warn('discord: disconnected');
+  logger.warn('discord: disconnected');
 });
 
 // Discord general warning
 client.on('warn', info => {
-  console.warn('discord: warning', info);
+  logger.warn('discord: warning');
+  logger.warn(info);
 });
 
 // Discord is reconnecting
 client.on('reconnecting', () => {
-  console.info('discord: reconnecting');
+  logger.info('discord: reconnecting');
 });
 
 // Discord has resumed
 client.on('resumed', replayed => {
-  console.info(`discord: resumed, replayed ${replayed} item(s)`);
+  logger.info(`discord: resumed, replayed ${replayed} item(s)`);
 });
 
 // Discord has erred
 client.on('error', err => {
-  console.error('discord: error:', err ? err.stack : '');
+  logger.error('discord: error:');
+  logger.error(err);
 });
 
 client.on('ready', () => {
-  console.info(`discord: connection success: connected as '${client.user.username}'`);
-  console.log(`discord: command prefix: ${process.env.DISCORD_CMD_PREFIX}`);
+  logger.info('discord: connection success');
+  logger.info(`discord: connected as '${client.user.username}'`);
+  logger.info(`discord: command prefix: ${process.env.DISCORD_CMD_PREFIX}`);
 });
 
 client.on('message', msg => {
@@ -65,23 +68,24 @@ client.on('message', msg => {
   if (!msg.cmd) return;
   // We only want to focus on 'twitter' commands
   if (msg.cmd !== 'twitter') return;
+  // These commands need to be run in a guild text channel to associate the guild id and channel id
   if (msg.channel.type === 'dm') {
-    console.log(`[DM] <${msg.author.tag}>: ${msg.content}`);
-  } else {
-    console.log(`[${msg.guild.name}] (#${msg.channel.name}) <${msg.author.tag}>: ${msg.content}`);
+    msg.author.send('This command does not work via DMs. Please run it in a guild\'s text channel.')
+      .catch(logger.error);
+    return;
   }
+  logger.debug(`DISCORD: [${msg.guild.name}] (#${msg.channel.name}) <${msg.author.tag}>: ${msg.content}`);
   msg.prefix = process.env.DISCORD_CMD_PREFIX; // eslint-disable-line no-param-reassign
-  debug(msg.prefix, msg.cmd, msg.params);
   commandHandler(msg);
 });
 
 module.exports = {
   connect: () => {
-    console.log('Attempting to connect to Discord...');
+    logger.info('discord: connecting...');
     client.login(process.env.DISCORD_BOT_TOKEN)
       .catch(err => {
-        console.error('discord: login error');
-        if (err && err.message) console.error(err.message);
+        logger.error('discord: login error');
+        logger.error(err);
         process.exit(1);
       });
   },
@@ -96,29 +100,25 @@ module.exports = {
           .map(c => client.channels.get(c.channel_id))
           .filter(c => c && c.permissionsFor(client.user).has('SEND_MESSAGES'))
           .map(c => channelSend(c, str, files));
+        if (channels.length === 0) {
+          logger.info(`TWEET: ${tweet.id_str}: No valid channels found to post to`);
+          return;
+        }
         // Send to Discord channels
         utils.promiseSome(channels)
           .then(promiseResults => {
-            debug(promiseResults);
-            const entry = new TweetsModel({
+            logger.info(`TWEET: ${tweet.id_str}: Posted to ${promiseResults.filter(x => x).length} channel(s)`);
+            const entry = new PostsModel({
               tweet_id: tweet.id_str,
               messages: promiseResults,
             });
-            debug('saving discord message ids to database');
-            entry.save()
-              .then(() => {
-                debug('save to database completed ok');
-              })
-              .catch(console.error);
+            entry.save().catch(logger.error);
             // Remove the temp directory we made for converting gifs if it exists
-            debug('removing temp tweet directory');
-            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), err =>  {
-              debug('removal of temp tweet directory completed: Error:', err);
-            });
+            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), () => {});
           })
-          .catch(console.error);
+          .catch(logger.error);
       })
-      .catch(console.error);
+      .catch(logger.error);
   },
 };
 

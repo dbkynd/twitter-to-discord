@@ -1,27 +1,19 @@
 'use strict';
 
-const debug = require('debug')('app:commandHandler');
 const Discord = require('discord.js');
+const logger = require('./logger');
 const FeedsModel = require('./models/feeds');
 const twitterAPI = require('./twitterAPI');
 const utils = require('./utils');
 const myEvents = require('./events');
 
-debug('Loading discordCommandHandler.js');
+logger.debug('Loading discordCommandHandler.js');
 
 module.exports = msg => {
-  // These commands need to be run in a guild text channel to associate the guild id and channel id
-  if (msg.channel.type === 'dm') {
-    debug('message was ran in a DM channel');
-    msg.author.send('This command does not work via DMs. Please run it in a guild\'s text channel.')
-      .catch(console.error);
-    return;
-  }
-
   // If only the command was run with no parameters show the root usage message
   if (msg.params.length === 0) {
-    debug('not enough parameters to continue');
-    msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} <add | remove | list>\`\``).catch(console.error);
+    logger.debug('no parameters, unable to continue, sending usage');
+    msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} <add | remove | list>\`\``).catch(logger.error);
     return;
   }
 
@@ -29,7 +21,7 @@ module.exports = msg => {
   const action = msg.params[0];
   // Get the command target. For add and remove this will be a twitter screen name
   const target = msg.params[1];
-  debug(action, target);
+  logger.debug(`action: ${action} target: ${target}`);
 
   // Decide what action to take
   switch (action) {
@@ -37,18 +29,18 @@ module.exports = msg => {
       if (!hasTarget()) return;
       getSingleRecord(target)
         .then(data => addChannel(msg, target, data))
-        .catch(console.error);
+        .catch(logger.error);
       break;
     case 'remove':
       if (!hasTarget()) return;
       getSingleRecord(target)
         .then(data => removeChannel(msg, target, data))
-        .catch(console.error);
+        .catch(logger.error);
       break;
     case 'list':
       getAllRecords()
         .then(data => listChannels(msg, target, data))
-        .catch(console.error);
+        .catch(logger.error);
       break;
     case 'post':
       // Only the bot owner can manually post tweets
@@ -56,7 +48,7 @@ module.exports = msg => {
       if (msg.author.id !== process.env.DISCORD_BOT_OWNER_ID) return;
       if (!hasTarget()) return;
       if (!/^\d+$/.test(target)) {
-        msg.channel.send(`**${target}** is not a valid tweet ID.`).catch(console.error);
+        msg.channel.send(`**${target}** is not a valid tweet ID.`).catch(logger.error);
         return;
       }
       twitterAPI.getTweet(target)
@@ -65,20 +57,21 @@ module.exports = msg => {
         })
         .catch(err => {
           if (err && err[0] && err[0].code === 8) {
-            msg.channel.send(err[0].message).catch(console.error);
+            msg.channel.send(err[0].message).catch(logger.error);
           } else {
-            console.error(err);
+            logger.error(err);
           }
         });
       break;
     default:
-      msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} <add | remove | list>\`\``).catch(console.error);
+      logger.debug('action did not match any of our actions, send usage');
+      msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} <add | remove | list>\`\``).catch(logger.error);
   }
 
   function hasTarget() {
     if (!target) {
-      debug('no target. unable to continue');
-      msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} ${action} <target>\`\``).catch(console.error);
+      logger.debug('no target, unable to continue');
+      msg.channel.send(`Usage: \`\`${msg.prefix}${msg.cmd} ${action} <target>\`\``).catch(logger.error);
       return false;
     }
     return true;
@@ -87,6 +80,7 @@ module.exports = msg => {
 
 function getSingleRecord(screenName) {
   return new Promise((resolve, reject) => {
+    logger.debug('getting a single feed record');
     const name = new RegExp(`^${screenName}$`, 'i');
     FeedsModel.findOne({ screen_name: name })
       .then(resolve)
@@ -96,6 +90,7 @@ function getSingleRecord(screenName) {
 
 function getAllRecords() {
   return new Promise((resolve, reject) => {
+    logger.debug('getting all feeds records');
     FeedsModel.find()
       .then(resolve)
       .catch(reject);
@@ -103,13 +98,13 @@ function getAllRecords() {
 }
 
 function addChannel(msg, target, data) {
-  debug('addChannel', data);
+  logger.debug('adding a channel');
+  logger.debug(data);
   // We have data about this twitter user
   if (data) {
     // See if this channel is already registered or if we need to add this channel
     const addThisChannel = !data.channels
       .find(x => x.guild_id === msg.guild.id && x.channel_id === msg.channel.id);
-    debug(addThisChannel);
     if (addThisChannel) {
       // Add this channel / guild to the array of channels
       data.channels.push({
@@ -117,20 +112,21 @@ function addChannel(msg, target, data) {
         channel_id: msg.channel.id,
       });
       // Save the modified record back to the database
+      logger.debug('saving new channel to record');
       data.save({ upsert: true })
         .then(() => {
           msg.channel.send(`This channel will now receive tweets from **${data.screen_name}**.`)
-            .catch(console.error);
+            .catch(logger.error);
         })
         .catch(err => {
-          console.error(err);
+          logger.error(err);
           msg.channel.send('There was an issue communicating with the database. Please try again later.')
-            .catch(console.error);
+            .catch(logger.error);
         });
     } else {
       // Don't add this channel because it is already added
       msg.channel.send(`This channel already receives tweets from **${data.screen_name}**`)
-        .catch(console.error);
+        .catch(logger.error);
     }
   } else {
     // We do not have any data for this twitter screen_name
@@ -138,7 +134,7 @@ function addChannel(msg, target, data) {
       .then(userData => {
         // Exit if the target screen_name is not a registered twitter user
         if (userData === false) {
-          msg.channel.send(`**${target}** is not a registered twitter account.`).catch(console.error);
+          msg.channel.send(`**${target}** is not a registered twitter account.`).catch(logger.error);
           return;
         }
         // Create the record to save
@@ -150,27 +146,28 @@ function addChannel(msg, target, data) {
             channel_id: msg.channel.id,
           }],
         });
-        debug(entry);
+        logger.debug('saving new feed record to database');
         // Save the new record
         entry.save()
           .then(() => {
             msg.channel.send(`This channel will now receive tweets from **${entry.screen_name}**`)
-              .catch(console.error);
-            debug('New user added, flagging twitter reload');
+              .catch(logger.error);
+            logger.debug('new feed added, flagging twitter reload');
             utils.reload = true;
           })
           .catch(err => {
-            console.error(err);
+            logger.error(err);
             msg.channel.send('There was an issue communicating with the database. Please try again later.')
-              .catch(console.error);
+              .catch(logger.error);
           });
       })
-      .catch(console.error);
+      .catch(logger.error);
   }
 }
 
 function removeChannel(msg, target, data) {
-  debug('removeChannel', data);
+  logger.debug('removing a channel');
+  logger.debug(data);
   // We have data for this twitter screen_name
   if (data) {
     // Get the channel index of the channel we ran this command in
@@ -183,35 +180,33 @@ function removeChannel(msg, target, data) {
       }
     }
     // The channel we are in is currently registered
-    debug('channel index:', index);
     if (index === -1) {
       // The channel we are in is not currently registered
       msg.channel.send(`**${data.screen_name}** is not registered to receive tweets in this channel.`)
-        .catch(console.error);
+        .catch(logger.error);
     } else {
       // Splice this channel out of the channels array
       data.channels.splice(index, 1);
-      debug('post splice channels length:', data.channels.length);
       let databaseAction;
       if (data.channels.length > 0) {
-        debug('removing channel from record');
+        logger.debug('removing a channel from a record');
         databaseAction = data.save({ upsert: true });
       } else {
-        debug('removing entire record');
+        logger.debug('removing an entire record');
         databaseAction = data.remove();
       }
       databaseAction.then(() => {
         msg.channel.send(`This channel will no longer receive tweets from **${data.screen_name}**`)
-          .catch(console.error);
+          .catch(logger.error);
         if (data.channels.length === 0) {
-          debug('Old user removed, flagging reload');
+          logger.debug('old feed removed, flagging reload');
           utils.reload = true;
         }
       })
         .catch(err => {
-          console.error(err);
+          logger.error(err);
           msg.channel.send('There was an issue communicating with the database. Please try again later.')
-            .catch(console.error);
+            .catch(logger.error);
         });
     }
   } else {
@@ -221,29 +216,29 @@ function removeChannel(msg, target, data) {
       .then(userData => {
         // Exit if the target screen_name is not a registered twitter user
         if (userData === false) {
-          msg.channel.send(`**${target}** is not a registered twitter account.`).catch(console.error);
+          msg.channel.send(`**${target}** is not a registered twitter account.`).catch(logger.error);
           return;
         }
         msg.channel.send(`**${userData.screen_name}** is not registered to post tweets in any channels.`)
-          .catch(console.error);
+          .catch(logger.error);
       })
-      .catch(console.error);
+      .catch(logger.error);
   }
 }
 
 function listChannels(msg, target, data) {
-  debug('listChannel', data.length);
+  logger.debug(`listing ${data.length} channels`);
   // Tell the user if we have 0 records
   // The database is empty
   if (data.length === 0) {
-    msg.channel.send('No twitter accounts are currently posting tweets to any channels.').catch(console.error);
+    msg.channel.send('No twitter accounts are currently posting tweets to any channels.').catch(logger.error);
     return;
   }
   // Build a string to post to Discord
   let str = '';
   // Only the bot owner can request to see what is happening in all the guilds
   if (target === 'all' && msg.author.id === process.env.DISCORD_BOT_OWNER_ID) {
-    debug('listing twitter feeds for all guilds');
+    logger.debug('listing twitter feeds for all guilds');
     data.forEach(result => {
       // Get channels that currently exist
       // It's possible to have a channel registered that was later deleted
@@ -260,7 +255,7 @@ function listChannels(msg, target, data) {
       }
     });
   } else {
-    debug('listing twitter feeds for this guild only');
+    logger.debug('listing twitter feeds for this guild only');
     // Get only feeds that post to any channel in this guild
     data.filter(x => x.channels.find(c => c.guild_id === msg.guild.id))
       .forEach(x => {
@@ -276,10 +271,10 @@ function listChannels(msg, target, data) {
       });
   }
   if (!str) {
-    msg.channel.send('No twitter accounts are currently posting tweets to any channels.').catch(console.error);
+    msg.channel.send('No twitter accounts are currently posting tweets to any channels.').catch(logger.error);
     return;
   }
-  msg.channel.send(str, { split: { maxLength: 1800 } }).catch(console.error);
+  msg.channel.send(str, { split: { maxLength: 1800 } }).catch(logger.error);
 }
 
 function makePossessive(name) {
