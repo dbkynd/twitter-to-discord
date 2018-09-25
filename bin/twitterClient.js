@@ -21,6 +21,7 @@ twitter.on('connection success', url => {
   logger.info('twitter: connection success');
   logger.info(`twitter: streaming ${utils.ids.length} twitter feed(s)`);
   logger.debug(url);
+  myEvents.emit('notify_discord');
 });
 
 // Emitted when a the connection to the Twitter Stream API is taken down / closed.
@@ -71,7 +72,7 @@ twitter.on('connection error http', httpStatusCode => {
 // The reconnect will attempt a reconnect after 1 minute
 // and double the reconnect attempts exponentially.
 twitter.on('connection rate limit', httpStatusCode => {
-  logger.warn(`twitter: connection rate limit ${httpStatusCode}`);
+  logger.warn(`twitter: connection rate limit: ${httpStatusCode}`);
 });
 
 // Emitted when the connection to the Twitter Stream API throw an unexpected error

@@ -5,6 +5,7 @@ const logger = require('./logger');
 
 const ids = [];
 let reload = false; // eslint-disable-line prefer-const
+const notify = [];
 
 // Similar to Promise.all except it will not reject if one of the promises rejects
 // Instead we will get a null result
@@ -89,6 +90,7 @@ function makeDir(location) {
 module.exports = {
   ids,
   reload,
+  notify,
   promiseSome,
   createDir,
 };

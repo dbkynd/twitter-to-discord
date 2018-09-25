@@ -3,11 +3,13 @@
 const Discord = require('discord.js');
 const rimraf = require('rimraf');
 const path = require('path');
+const moment = require('moment');
 const logger = require('./logger');
 const commandHandler = require('./discordCommandHandler');
 const FeedsModel = require('./models/feeds');
 const PostsModel = require('./models/posts');
 const utils = require('./utils');
+const myEvents = require('./events');
 
 logger.debug('Loading discordClient.js');
 
@@ -49,6 +51,14 @@ client.on('ready', () => {
   logger.info('discord: connection success');
   logger.info(`discord: connected as '${client.user.username}'`);
   logger.info(`discord: command prefix: ${process.env.DISCORD_CMD_PREFIX}`);
+});
+
+// Only run the first time the discord client is ready
+client.once('ready', () => {
+  // Create a timer to check for stale records every hour
+  setInterval(checkForStaleRecords, 1000 * 60 * 60);
+  // Check for stale records 10 seconds after startup
+  setTimeout(checkForStaleRecords, 1000 * 10);
 });
 
 client.on('message', msg => {
@@ -101,20 +111,21 @@ module.exports = {
           .filter(c => c && c.permissionsFor(client.user).has('SEND_MESSAGES'))
           .map(c => channelSend(c, str, files));
         if (channels.length === 0) {
-          logger.info(`TWEET: ${tweet.id_str}: No valid channels found to post to`);
+          logger.info(`TWEET: ${tweet.id_str}: No valid Discord channel(s) found to post to. ${data.channels.length} registered`);
           return;
         }
         // Send to Discord channels
         utils.promiseSome(channels)
           .then(promiseResults => {
-            logger.info(`TWEET: ${tweet.id_str}: Posted to ${promiseResults.filter(x => x).length} channel(s)`);
+            logger.info(`TWEET: ${tweet.id_str}: Posted to ${promiseResults.filter(x => x).length}/${data.channels.length} Discord channel(s)`);
             const entry = new PostsModel({
               tweet_id: tweet.id_str,
               messages: promiseResults,
             });
             entry.save().catch(logger.error);
             // Remove the temp directory we made for converting gifs if it exists
-            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), () => {});
+            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), () => {
+            });
           })
           .catch(logger.error);
       })
@@ -128,4 +139,35 @@ function channelSend(channel, str, files) {
       .then(message => resolve({ channel_id: channel.id, message_id: message.id }))
       .catch(reject);
   });
+}
+
+myEvents.on('notify_discord', () => {
+  while (utils.notify.length > 0) {
+    // Shift the next notification entry out of the array
+    const entry = utils.notify.shift();
+    // Ensure that this entry is in the list of currently streamed ids
+    if (utils.ids.includes(entry.twitter_id)) {
+      // Get the discord cached data now in case something was changed between being added and now
+      const user = client.users.get(entry.user_id);
+      const channel = client.channels.get(entry.channel_id);
+      // Ensure we have a user and a channel to post to
+      if (user && channel) {
+        channel.send(`${user}, The twitter feed for **${entry.screen_name}** has synced and will now be posted to this channel.`).catch(logger.error);
+      }
+    }
+  }
+});
+
+function checkForStaleRecords() {
+  logger.debug('checking for stale feed records');
+  FeedsModel.find()
+    .then(records => {
+      logger.debug(`${records.length} total results`);
+      records.forEach(record => {
+        if (!record.channels && moment(record.modified_on) < moment().subtract(3, 'd')) {
+
+        }
+      });
+    })
+    .catch(logger.error);
 }
