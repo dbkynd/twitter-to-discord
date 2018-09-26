@@ -104,6 +104,7 @@ module.exports = {
     // Get the record for the current feed
     FeedsModel.findOne({ twitter_id: tweet.user.id_str })
       .then(data => {
+        if (!data || !data.channels) return;
         // Get channels that exist and we have send message permissions in
         // Mapped into an array of promises
         const channels = data.channels
@@ -163,11 +164,74 @@ function checkForStaleRecords() {
   FeedsModel.find()
     .then(records => {
       logger.debug(`${records.length} total results`);
+      let removedRecords = 0;
+      let removedChannels = 0;
       records.forEach(record => {
-        if (!record.channels && moment(record.modified_on) < moment().subtract(3, 'd')) {
-
+        // Remove record if there have been no channels registered to it for over 3 days
+        if ((!record.channels || record.channels.length === 0) && moment(record.modified_on).add(3, 'd') < moment()) {
+          logger.debug(`record has no or 0 channels for over 3 days, removing record: ${record.screen_name}`);
+          removedRecords++;
+          record.remove()
+            .then(() => {
+              logger.debug(`record removed: ${record.screen_name}`);
+            })
+            .catch(logger.error);
+          return;
+        }
+        logger.verbose(`checking channels for: ${record.screen_name}`);
+        // Loop through the registered channels and ensure they still exist
+        // and have send permissions at a minimum
+        const validChannels = [];
+        record.channels.forEach(x => {
+          if (moment(x.created_at).add(3, 'd') > moment()) {
+            // This record was created within the last 3 days
+            // Give them time to get their permissions correctly set
+            // Consider valid
+            validChannels.push(x);
+            return;
+          }
+          const guild = client.guilds.get(x.guild_id);
+          if (!guild || !guild.available) {
+            logger.debug(`the guild ${x.guild_id} does not exist or is unavailable`);
+            return;
+          }
+          const channel = client.channels.get(x.channel_id);
+          if (!channel || !channel.permissionsFor(client.user).has('SEND_MESSAGES')) {
+            logger.debug(`the channel ${x.channel_id} does not exist or is unavailable`);
+            return;
+          }
+          validChannels.push(x);
+        });
+        if (validChannels.length === 0) {
+          // There are no valid channels left
+          logger.debug(`no channels left for this record after validating accessibility, removing record: ${record.screen_name}`);
+          removedRecords++;
+          record.remove()
+            .then(() => {
+              logger.debug(`record removed: ${record.screen_name}`);
+            })
+            .catch(logger.error);
+          return;
+        }
+        // See if the amount of valid channels has changed
+        if (record.channels.length !== validChannels.length) {
+          const diff = record.channels.length - validChannels.length;
+          // Update the record with the valid channels
+          logger.debug(`updating record - minus ${diff} channels`);
+          removedChannels += diff;
+          const entry = FeedsModel(record);
+          entry.channels = validChannels;
+          entry.save({ upsert: true })
+            .then(() => {
+              logger.debug(`record updated: ${record.screen_name}`);
+            }).catch(logger.error);
         }
       });
-    })
-    .catch(logger.error);
+      if (removedRecords === 0 && removedChannels === 0) {
+        logger.debug('no stale records');
+        return;
+      }
+      logger.info(`Removed ${removedRecords} stale record(s) and ${removedChannels} stale channel(s) from the database`);
+      utils.reload = true;
+    });
 }
