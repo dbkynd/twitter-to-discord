@@ -3,8 +3,7 @@ version: "2"
 services:
 
   app:
-    build: .
-    image: dbkynd:twitter-to-discord
+    image: dbkynd/twitter-to-discord
     restart: always
     env_file:
       - .env
