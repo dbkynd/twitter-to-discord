@@ -143,7 +143,6 @@ function connect() {
       // Stream tweets
       twitter.stream('statuses/filter', {
         follow: ids,
-        stall_warnings: true,
       });
     })
     .catch(err => {
