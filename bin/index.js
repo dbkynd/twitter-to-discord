@@ -4,11 +4,11 @@
 require('./mongodb');
 
 // Connect to Discord
-const discordClient = require('./discordClient');
+const discord = require('./discord');
 
-discordClient.connect();
+discord.connect();
 
 // Initial connection to Twitter Stream API on startup
-const twitterClient = require('./twitterClient');
+const twitter = require('./twitter');
 
-twitterClient.connect();
+twitter.connect();

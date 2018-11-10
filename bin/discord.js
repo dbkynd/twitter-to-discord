@@ -5,10 +5,11 @@ const rimraf = require('rimraf');
 const path = require('path');
 const moment = require('moment');
 const logger = require('./logger');
-const commandHandler = require('./discordCommandHandler');
+const commands = require('./commands');
 const FeedsModel = require('./models/feeds');
 const PostsModel = require('./models/posts');
 const utils = require('./utils');
+const state = require('./state');
 const myEvents = require('./events');
 
 logger.debug('Loading discordClient.js');
@@ -86,7 +87,7 @@ client.on('message', msg => {
   }
   logger.debug(`DISCORD: [${msg.guild.name}] (#${msg.channel.name}) <${msg.author.tag}>: ${msg.content}`);
   msg.prefix = process.env.DISCORD_CMD_PREFIX; // eslint-disable-line no-param-reassign
-  commandHandler(msg);
+  commands(msg);
 });
 
 module.exports = {
@@ -99,55 +100,15 @@ module.exports = {
         process.exit(1);
       });
   },
-
-  send: (tweet, str, files) => {
-    // Get the record for the current feed
-    FeedsModel.findOne({ twitter_id: tweet.user.id_str })
-      .then(data => {
-        if (!data || !data.channels) return;
-        // Get channels that exist and we have send message permissions in
-        // Mapped into an array of promises
-        const channels = data.channels
-          .map(c => client.channels.get(c.channel_id))
-          .filter(c => c && c.permissionsFor(client.user).has('SEND_MESSAGES'))
-          .map(c => channelSend(c, str, files));
-        if (channels.length === 0) {
-          logger.info(`TWEET: ${tweet.id_str}: No valid Discord channel(s) found to post to. ${data.channels.length} registered`);
-          return;
-        }
-        // Send to Discord channels
-        utils.promiseSome(channels)
-          .then(promiseResults => {
-            logger.info(`TWEET: ${tweet.id_str}: Posted to ${promiseResults.filter(x => x).length}/${data.channels.length} Discord channel(s)`);
-            const entry = new PostsModel({
-              tweet_id: tweet.id_str,
-              messages: promiseResults,
-            });
-            entry.save().catch(logger.error);
-            // Remove the temp directory we made for converting gifs if it exists
-            rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), () => {
-            });
-          })
-          .catch(logger.error);
-      })
-      .catch(logger.error);
-  },
 };
 
-function channelSend(channel, str, files) {
-  return new Promise((resolve, reject) => {
-    channel.send(str, { files })
-      .then(message => resolve({ channel_id: channel.id, message_id: message.id }))
-      .catch(reject);
-  });
-}
 
-myEvents.on('notify_discord', () => {
-  while (utils.notify.length > 0) {
+myEvents.on('discord_notify', () => {
+  while (state.notify.length > 0) {
     // Shift the next notification entry out of the array
-    const entry = utils.notify.shift();
+    const entry = state.notify.shift();
     // Ensure that this entry is in the list of currently streamed ids
-    if (utils.ids.includes(entry.twitter_id)) {
+    if (state.ids.includes(entry.twitter_id)) {
       // Get the discord cached data now in case something was changed between being added and now
       const user = client.users.get(entry.user_id);
       const channel = client.channels.get(entry.channel_id);
@@ -158,6 +119,47 @@ myEvents.on('notify_discord', () => {
     }
   }
 });
+
+myEvents.on('discord_send', (tweet, str, files) => {
+  // Get the record for the current feed
+  FeedsModel.findOne({ twitter_id: tweet.user.id_str })
+    .then(data => {
+      if (!data || !data.channels) return;
+      // Get channels that exist and we have send message permissions in
+      // Mapped into an array of promises
+      const channels = data.channels
+        .map(c => client.channels.get(c.channel_id))
+        .filter(c => c && c.permissionsFor(client.user).has('SEND_MESSAGES'))
+        .map(c => channelSend(c, str, files));
+      if (channels.length === 0) {
+        logger.info(`TWEET: ${tweet.id_str}: No valid Discord channel(s) found to post to. ${data.channels.length} registered`);
+        return;
+      }
+      // Send to Discord channels
+      utils.promiseSome(channels)
+        .then(promiseResults => {
+          logger.info(`TWEET: ${tweet.id_str}: Posted to ${promiseResults.filter(x => x).length}/${data.channels.length} Discord channel(s)`);
+          const entry = new PostsModel({
+            tweet_id: tweet.id_str,
+            messages: promiseResults,
+          });
+          entry.save().catch(logger.error);
+          // Remove the temp directory we made for converting gifs if it exists
+          rimraf(path.join(process.env.TEMP, `tweet-${tweet.id_str}`), () => {
+          });
+        })
+        .catch(logger.error);
+    })
+    .catch(logger.error);
+});
+
+function channelSend(channel, str, files) {
+  return new Promise((resolve, reject) => {
+    channel.send(str, { files })
+      .then(message => resolve({ channel_id: channel.id, message_id: message.id }))
+      .catch(reject);
+  });
+}
 
 function checkForStaleRecords() {
   logger.debug('checking for stale feed records');
@@ -178,7 +180,7 @@ function checkForStaleRecords() {
             .catch(logger.error);
           return;
         }
-        logger.verbose(`checking channels for: ${record.screen_name}`);
+        logger.silly(`checking channels for: ${record.screen_name}`);
         // Loop through the registered channels and ensure they still exist
         // and have send permissions at a minimum
         const validChannels = [];
@@ -232,6 +234,6 @@ function checkForStaleRecords() {
         return;
       }
       logger.info(`Removed ${removedRecords} stale record(s) and ${removedChannels} stale channel(s) from the database`);
-      utils.reload = true;
+      state.reload = true;
     });
 }

@@ -7,8 +7,9 @@ const fetch = require('node-fetch');
 const { exec } = require('child_process');
 const logger = require('./logger');
 const utils = require('./utils');
-const discordClient = require('./discordClient');
+const state = require('./state');
 const PostsModel = require('./models/posts');
+const myEvents = require('./events');
 
 logger.debug('Loading tweetHandler.js');
 
@@ -29,7 +30,7 @@ module.exports = (tweet, manual) => {
 
   // Exit if tweet is not authored by a registered user we are currently streaming
   // This covers most re-tweets and replies unless from  another registered user
-  if (!utils.ids.includes(tweet.user.id_str)) {
+  if (!state.ids.includes(tweet.user.id_str)) {
     logger.debug(`TWEET: ${tweet.id_str}: Authored by an unregistered user. Exiting.`);
     return;
   }
@@ -143,7 +144,7 @@ module.exports = (tweet, manual) => {
       // There are no files to attach
       if (media.length === 0) {
         // Send to the Discord Client
-        discordClient.send(tweet, str);
+        myEvents.emit('discord_send', tweet, str);
         return;
       }
       // Attach files to discord message
@@ -154,14 +155,14 @@ module.exports = (tweet, manual) => {
         const p = path.parse(file);
         return { attachment: file, name: `${num--}${p.ext}` };
       });
-      discordClient.send(tweet, str, files);
+      myEvents.emit('discord_send', tweet, str, files);
     })
     .catch(err => {
       logger.error(err);
       // Send the string to the Discord Client regardless that the media promise failed
       // This should not occur if a single media element fails but due to a greater internal concern
       // as promiseSome does not reject on a single promise rejection unlike Promise.All
-      discordClient.send(tweet, str);
+      myEvents.emit('discord_send', tweet, str);
     });
 };
 

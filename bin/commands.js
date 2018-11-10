@@ -3,8 +3,8 @@
 const Discord = require('discord.js');
 const logger = require('./logger');
 const FeedsModel = require('./models/feeds');
-const twitterAPI = require('./twitterAPI');
-const utils = require('./utils');
+const state = require('./state');
+const twitter = require('./twitter');
 const myEvents = require('./events');
 
 logger.debug('Loading discordCommandHandler.js');
@@ -59,9 +59,9 @@ module.exports = msg => {
         msg.channel.send(`**${target}** is not a valid tweet ID.`).catch(logger.error);
         return;
       }
-      twitterAPI.getTweet(target)
-        .then(data => {
-          myEvents.emit('post', data);
+      twitter.getTweet(target)
+        .then(tweet => {
+          myEvents.emit('manual_post', tweet);
         })
         .catch(err => {
           if (err && err[0] && err[0].code === 8) {
@@ -88,7 +88,7 @@ module.exports = msg => {
 
 function lookupTarget(target, msg) {
   return new Promise((resolve, reject) => {
-    twitterAPI.getUser(target)
+    twitter.getUser(target)
       .then(userData => {
         if (userData === false) {
           msg.channel.send(`**${target}** is not a registered twitter account.`).catch(logger.error);
@@ -170,7 +170,7 @@ function addChannel(msg, user, record) {
         logger.info(`TWITTER: ADDING FEED: ${user.screen_name}`);
         logger.info(`DISCORD: Channel: ${msg.channel.id} User: ${msg.author.id} ADDED ${user.screen_name}`);
         logger.debug('new feed added, flagging twitter reload');
-        utils.reload = true;
+        state.reload = true;
         msg.channel.send('This channel will now receive tweets from '
           + `**${user.screen_name}**\n\nWe are not yet streaming that twitter feed. `
           + 'Please allow up to 5 minutes to sync.\n'
@@ -181,7 +181,7 @@ function addChannel(msg, user, record) {
             );
             collector.on('collect', m => {
               if (m.content.toLowerCase() === 'y' || m.content.toLowerCase() === 'yes') {
-                utils.notify.push({
+                state.notify.push({
                   user_id: msg.author.id,
                   channel_id: msg.channel.id,
                   screen_name: user.screen_name,
@@ -237,7 +237,7 @@ function removeChannel(msg, user, record) {
         if (record.channels.length === 0) {
           logger.info(`DISCORD: REMOVING FEED: ${user.screen_name}`);
           logger.debug('old feed removed, flagging reload');
-          utils.reload = true;
+          state.reload = true;
         }
       })
         .catch(err => {
