@@ -60,6 +60,7 @@ function connect() {
 
 function start() {
   myEvents.emit('discord_notify');
+  logger.info('twitter: connected');
 }
 
 function data(tweet) {
