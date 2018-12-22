@@ -1,17 +1,20 @@
 'use strict';
 
-const Twitter = require('twitter-lite');
+const Twit = require('twit');
+const { get } = require('lodash');
 const logger = require('./logger');
 const state = require('./state');
 const FeedsModel = require('./models/feeds');
 const tweetHandler = require('./tweet');
 const myEvents = require('./events');
 
-const client = new Twitter({
+const client = new Twit({
   consumer_key: process.env.TWITTER_CONSUMER_KEY,
   consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-  access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
+  access_token: process.env.TWITTER_ACCESS_TOKEN_KEY,
   access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+  timeout_ms: 60 * 1000,
+  strictSSL: true,
 });
 
 // See if we need to trigger a reload from somebody adding / removing things
@@ -46,11 +49,9 @@ function connect() {
       client.stream('statuses/filter', {
         follow: state.ids,
       })
-        .on('start', start)
-        .on('data', data)
-        .on('ping', ping)
-        .on('error', error)
-        .on('end', end);
+        .on('connected', connected)
+        .on('tweet', tweet)
+        .on('error', error);
     })
     .catch(err => {
       logger.error('error reading from mongodb FeedsModel');
@@ -58,29 +59,21 @@ function connect() {
     });
 }
 
-function start() {
+function connected() {
   myEvents.emit('discord_notify');
   logger.info('twitter: connection success');
 }
 
-function data(tweet) {
-  tweetHandler(tweet);
+function tweet(data) {
+  tweetHandler(data);
 }
 
-myEvents.on('manual_post', tweet => {
-  tweetHandler(tweet, true);
+myEvents.on('manual_post', data => {
+  tweetHandler(data, true);
 });
 
-function ping() {
-  logger.silly('ping');
-}
-
 function error(err) {
-  console.error(err);
-}
-
-function end() {
-  connect();
+  throw new Error(err);
 }
 
 module.exports = {
@@ -89,14 +82,12 @@ module.exports = {
     logger.debug(`lookup user: ${screenName}`);
     client.get('users/lookup', { screen_name: screenName })
       .then(res => {
-        resolve(res[0]);
+        resolve(get(res, 'data[0]', null));
       })
       .catch(err => {
-        if (err && err.errors && err.errors[0]) {
-          if (err.errors[0].code && err.errors[0].code === 17) {
-            resolve(false);
-            return;
-          }
+        if (err && err.code === 17) {
+          resolve(false);
+          return;
         }
         reject(err);
       });
@@ -105,7 +96,7 @@ module.exports = {
   getTweet: id => new Promise((resolve, reject) => {
     logger.debug(`manually looking up tweet: ${id}`);
     client.get('statuses/show', { id, tweet_mode: 'extended' })
-      .then(resolve)
+      .then(response => resolve(response.data))
       .catch(reject);
   }),
 };

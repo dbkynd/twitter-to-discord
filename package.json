@@ -21,11 +21,12 @@
     "command-exists": "^1.2.8",
     "discord.js": "^11.4.2",
     "html-entities": "^1.2.1",
+    "lodash": "^4.17.11",
     "moment": "^2.22.2",
     "mongoose": "^5.3.11",
     "node-fetch": "^2.2.1",
     "rimraf": "^2.6.2",
-    "twitter-lite": "^0.7.0",
+    "twit": "^2.2.11",
     "winston": "^3.1.0"
   },
   "devDependencies": {
