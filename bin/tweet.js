@@ -63,8 +63,6 @@ module.exports = (tweet, manual) => {
     return;
   }
 
-  logger.info(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
-
   // Get the proper tweet context
   // The tweet or the re-tweeted tweet if it exists
   const context = tweet.retweeted_status || tweet;
@@ -83,6 +81,13 @@ module.exports = (tweet, manual) => {
     text = context.text; // eslint-disable-line prefer-destructuring
     extendedEntities = context.extended_entities;
   }
+
+  if (text.startsWith('@')) {
+    logger.debug(`TWEET: ${tweet.id_str}: @ reply. Exiting.`);
+    return;
+  }
+
+  logger.info(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
 
   // Decode html entities in the twitter text string so they appear correctly (&amp)
   let modifiedText = htmlEntities.decode(text);
