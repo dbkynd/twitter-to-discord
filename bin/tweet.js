@@ -8,7 +8,6 @@ const { exec } = require('child_process');
 const logger = require('./logger');
 const utils = require('./utils');
 const state = require('./state');
-const PostsModel = require('./models/posts');
 const myEvents = require('./events');
 
 logger.debug('Loading tweetHandler.js');
@@ -18,14 +17,6 @@ const recentTweets = [];
 
 // Process tweets
 module.exports = (tweet, manual) => {
-  // Handle tweet deletions first
-  // The JSON structure is completely different on a deletion
-  if (tweet.delete) {
-    logger.info(`TWEET: ${tweet.delete.status.id_str}: DELETED`);
-    deleteTweet(tweet);
-    return;
-  }
-
   logger.debug(`TWEET: ${tweet.id_str}: https://twitter.com/${tweet.user.screen_name}/status/${tweet.id_str}`);
 
   // Exit if tweet is not authored by a registered user we are currently streaming
@@ -252,34 +243,4 @@ function createGIF(data) {
         }
       });
   });
-}
-
-function deleteTweet(tweet) {
-  if (!tweet || !tweet.delete || !tweet.delete.status) return;
-  logger.debug(`TWEET: ${tweet.delete.status.id_str}: Processing deletion...`);
-  // Find a matching record for the tweet id
-  PostsModel.find({ tweet_id: tweet.delete.status.id_str })
-    .then(results => {
-      results.forEach(result => {
-        // Exit if no match or the messages property does not exist for some reason
-        if (!result || !result.messages) return;
-        result.messages
-          .forEach(msg => {
-            // Send a DELETE request to Discord api directly for each message we want to delete
-            const uri = `https://discordapp.com/api/channels/${msg.channel_id}/messages/${msg.message_id}`;
-            logger.debug(uri);
-            fetch(uri, {
-              method: 'DELETE',
-              headers: {
-                Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-              },
-            })
-              .then(() => {
-                logger.debug('discord twitter post message delete OK');
-              })
-              .catch(logger.error);
-          });
-      });
-    })
-    .catch(logger.error);
 }

@@ -3,8 +3,9 @@
 const fs = require('fs');
 const commandExistsSync = require('command-exists').sync;
 const logger = require('./bin/logger');
+const version = require('./package.json').version;
 
-logger.info('Starting the twitter-to-discord application');
+logger.info(`Starting the twitter-to-discord application v${version}`);
 
 // Extract all the env variables we will be using
 const {

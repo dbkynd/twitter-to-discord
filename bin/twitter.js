@@ -5,7 +5,8 @@ const { get } = require('lodash');
 const logger = require('./logger');
 const state = require('./state');
 const FeedsModel = require('./models/feeds');
-const tweetHandler = require('./tweet');
+const tweet = require('./tweet');
+const deleteTweet = require('./deleteTweet');
 const myEvents = require('./events');
 
 const client = new Twit({
@@ -51,6 +52,7 @@ function connect() {
       })
         .on('connected', connected)
         .on('tweet', tweet)
+        .on('delete', deleteTweet)
         .on('error', error);
     })
     .catch(err => {
@@ -64,12 +66,8 @@ function connected() {
   logger.info('twitter: connection success');
 }
 
-function tweet(data) {
-  tweetHandler(data);
-}
-
 myEvents.on('manual_post', data => {
-  tweetHandler(data, true);
+  tweet(data, true);
 });
 
 function error(err) {

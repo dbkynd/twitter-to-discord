@@ -1,6 +1,6 @@
 {
   "name": "twitter-to-discord",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Push Tweets to Discord channels.",
   "main": "app.js",
   "scripts": {
@@ -19,7 +19,7 @@
   "homepage": "https://github.com/dbkynd/twitter-to-discord#readme",
   "dependencies": {
     "command-exists": "^1.2.8",
-    "discord.js": "^11.4.2",
+    "discord.js": "^11.5.1",
     "html-entities": "^1.2.1",
     "lodash": "^4.17.11",
     "moment": "^2.22.2",
