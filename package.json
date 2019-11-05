@@ -23,7 +23,7 @@
     "html-entities": "^1.2.1",
     "lodash": "^4.17.11",
     "moment": "^2.22.2",
-    "mongoose": "^5.3.11",
+    "mongoose": "^5.7.5",
     "node-fetch": "^2.2.1",
     "rimraf": "^2.6.2",
     "twit": "^2.2.11",
