@@ -1,4 +1,4 @@
-FROM node:8.12.0-alpine
+FROM node:12.19.0-alpine
 
 RUN apk update && \
     apk add --no-cache ffmpeg graphicsmagick yarn
