@@ -5,14 +5,14 @@ const { inspect } = require('util');
 
 const enumerateErrorFormat = format(info => {
   if (info.message instanceof Error) {
-    info.message = Object.assign({ // eslint-disable-line no-param-reassign
+    info.message = Object.assign({ // eslint-disable-line no-param-reassign,prefer-object-spread
       message: info.message.message,
       stack: info.message.stack,
     }, info.message);
   }
 
   if (info instanceof Error) {
-    return Object.assign({
+    return Object.assign({ // eslint-disable-line prefer-object-spread
       message: info.message,
       stack: info.stack,
     }, info);

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const commandExistsSync = require('command-exists').sync;
 const logger = require('./bin/logger');
-const version = require('./package.json').version;
+const { version } = require('./package.json');
 
 logger.info(`Starting the twitter-to-discord application v${version}`);
 

@@ -67,6 +67,12 @@ client.on('message', msg => {
   if (msg.author.bot) return;
   // Exit if the message does not start with the prefix set
   if (!msg.content.startsWith(process.env.DISCORD_CMD_PREFIX)) return;
+  // These commands need to be run in a guild text channel to associate the guild id and channel id
+  if (msg.channel.type === 'dm') {
+    msg.author.send('This command does not work via DMs. Please run it in a guild\'s text channel.')
+      .catch(logger.error);
+    return;
+  }
   // Exit if the author of the message is not the bot's owner or the guild's owner
   if (msg.author.id !== process.env.DISCORD_BOT_OWNER_ID
     && msg.author.id !== msg.guild.owner.id) return;
@@ -79,12 +85,7 @@ client.on('message', msg => {
   if (!msg.cmd) return;
   // We only want to focus on 'twitter' commands
   if (msg.cmd !== 'twitter') return;
-  // These commands need to be run in a guild text channel to associate the guild id and channel id
-  if (msg.channel.type === 'dm') {
-    msg.author.send('This command does not work via DMs. Please run it in a guild\'s text channel.')
-      .catch(logger.error);
-    return;
-  }
+
   logger.debug(`DISCORD: [${msg.guild.name}] (#${msg.channel.name}) <${msg.author.tag}>: ${msg.content}`);
   msg.prefix = process.env.DISCORD_CMD_PREFIX; // eslint-disable-line no-param-reassign
   commands(msg);
@@ -101,7 +102,6 @@ module.exports = {
       });
   },
 };
-
 
 myEvents.on('discord_notify', () => {
   while (state.notify.length > 0) {

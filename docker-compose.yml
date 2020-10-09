@@ -1,9 +1,14 @@
-version: "2"
-
+version: '3'
 services:
-
   app:
     image: dbkynd/twitter-to-discord
-    restart: always
-    env_file:
-      - .env
+    restart: unless-stopped
+    environment:
+      - TWITTER_CONSUMER_KEY=
+      - TWITTER_CONSUMER_SECRET=
+      - TWITTER_ACCESS_TOKEN_KEY=
+      - TWITTER_ACCESS_TOKEN_SECRET=
+      - MONGO_URI=
+      - DISCORD_BOT_TOKEN=
+      - DISCORD_CMD_PREFIX=
+      - DISCORD_BOT_OWNER_ID=
