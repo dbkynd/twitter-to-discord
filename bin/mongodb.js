@@ -36,6 +36,7 @@ mongoose.connection.on('disconnected', () => {
 logger.info('mongodb: connecting...');
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
+  useUnifiedTopology: true,
   keepAlive: 1,
   connectTimeoutMS: 30000,
 })
