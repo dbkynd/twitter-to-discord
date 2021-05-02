@@ -1,0 +1,6 @@
+/* https://www.staging-typescript.org/tsconfig */
+
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["**/*/__*__"]
+}

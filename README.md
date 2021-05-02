@@ -7,7 +7,7 @@ Required ENV variables:
 `MONGO_URI`  
 `DISCORD_BOT_TOKEN`  
 `DISCORD_CMD_PREFIX`  
-`DISCORD_BOT_OWNER_ID`  
+`DISCORD_BOT_OWNER_ID`
 
 A Twitter application can be created here: https://apps.twitter.com  
 The Twitter application only needs READ access permissions.

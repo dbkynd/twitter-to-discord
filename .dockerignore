@@ -1,4 +1,7 @@
 .idea/
 node_modules/
-tweets/
+.tweets/
+temp/
+dist/
+coverage/
 .env
