@@ -1,4 +1,5 @@
 import Discord from 'discord.js'
+import logger from '../logger'
 import add from './add'
 import list from './list'
 import remove from './remove'
@@ -17,18 +18,6 @@ const commandData: Discord.ApplicationCommandData = {
           type: 'BOOLEAN',
           description:
             'List results from all connected guilds. Bot Owner option only.',
-        },
-      ],
-    },
-    {
-      name: 'manual',
-      type: 'SUB_COMMAND',
-      description: 'Manually post a tweet',
-      options: [
-        {
-          name: 'tweet_id',
-          type: 'STRING',
-          description: 'The tweet id to post.',
         },
       ],
     },
@@ -71,11 +60,8 @@ const commandData: Discord.ApplicationCommandData = {
 }
 
 export function register(client: Discord.Client): void {
-  /*if (client.application)
-    client.application.commands.create(commandData).catch(logger.error)*/
-  const guild = client.guilds.cache.get('140025699867164673')
-  if (guild) guild.commands.create(commandData)
-  // TODO
+  if (client.application)
+    client.application.commands.create(commandData).catch(logger.error)
 }
 
 export async function handler(interaction: Discord.Interaction): Promise<void> {
