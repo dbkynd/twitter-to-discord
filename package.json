@@ -9,7 +9,7 @@
     "dev": "cross-env NODE_ENV=development ts-node-dev --respawn --transpile-only -r dotenv/config src/index.ts",
     "test_stubs": "cross-env NODE_ENV=development ts-node-dev --transpile-only -r dotenv/config test_tweet_stubs.ts",
     "build": "rimraf ./dist && tsc -p ./tsconfig.build.json",
-    "start": "cross-env NODE_ENV=production node -r dotenv/config ./dist/index.js",
+    "start": "cross-env NODE_ENV=production node -r dotenv/config ./dist/src/index.js",
     "prettier": "prettier --write \"**/*.{js,ts,md,vue,*rc,json}\" --ignore-path .gitignore",
     "lint": "eslint --ext .js,.ts --ignore-path .gitignore .",
     "test": "jest",
